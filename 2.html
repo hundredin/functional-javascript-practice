@@ -1,0 +1,240 @@
+<html>
+
+<header>
+  <title>Functional Programming in JS</title>
+  <script>
+    const log = console.log
+    const clear = console.clear
+  </script>
+  <script src="lazy.js"></script>
+</header>
+<body>
+
+<h2>reduce 연습</h2>
+<pre>
+- sum
+- 숫자의 개수를 세어 object 에 카운트
+{ '1': 3, '2': 2, '3': 1}
+</pre>
+<script>
+const add = (acc, a) => acc += a
+log(reduce(add, 0, [1, 2, 3]))
+
+const inc = (obj, k) => {
+  obj[k] = (obj[k] || 0) + 1;
+  return obj;
+};
+
+const count = iterable => reduce(inc, {}, iterable)
+
+log(count([1, 1, 3, 4, 5, 5, 6, 7 ]))
+</script>
+
+<h2>go: 함수를 받아서 값을 리턴하는 함수</h2>
+
+<pre>
+const go = (a, f1, f2, f3) => f3(f2(f1(a)));
+
+결국 함수열을 어떤 방식으로 축약하고 있는 것 -> reduce 로 만들면 되겠구나!
+
+const go = (a, ...fs) => reduce((a, func) => func(a), a, fs)
+</pre>
+
+<script>
+const go = (a, ...fs) => reduce((a, func) => func(a), a, fs)
+go(
+  0,
+  a => a + 1,
+  a => a + 10,
+  a => a + 100,
+  log
+)
+</script>
+
+
+<h2>pipe : 함수를 받아서 함수를 리턴하는 함수</h2>
+
+<pre>
+const pipe = (f1, f2, f3) => (a) => f3(f2(f1(a)))
+->
+const pipe = (...fs) => (a) => go(a, ...fs);
+</pre>
+<script>
+const pipe = (...fs) => (a) => go(a, ...fs);
+const f = pipe(
+  a => a + 1,
+  a => a + 10,
+  a => a + 100);
+
+log(f(0))
+</script>
+
+<h2>집고 넘어갈 것</h2>
+<pre>
+- 원래 자바스크립트에 있을 수 없던 새로운 표현을 만든것. 이러한 방식의 프로그래밍을 메타프로그래밍이라고 함.
+- 메타프로그래밍을 가능하게 만드는 도구들 중에 하나가 클로저
+- 함수가 실행되고 있는 스코프의 상태를 기억하고 있는 것이 클로저인데, 클로저와 1급 함수, 즉 함수를 전달하거나 리턴할 수 있다는 것만 있으면 함수형 프로그래밍에 필요한 모든 기능을 구현할 수 있다.
+- 함수형 프로그래밍에 쌓여있는 기초는 이 두가지다.
+- 그런데 자바스크립트에서 iterable 이라는 훌륭한 순회 가능한 값이 생기고, 코드를 값으로 다룰 수 있게 도와주는 generator 라는 기능이 생겨서 더 높은 수준의 함수형 프로그래밍을 더 쉽게 할 수 있게 되었다.
+</pre>
+
+<h2>curry : 함수를 인자로 받고, 인자를 그 다음에 그 인자를 받은 함수를 리턴하는 함수</h2>
+<pre>
+다항으로 이루어진 함수를 단항 평가 할 수 있게 해주는 함수
+const curry = f => a => b => f(a, b);
+
+좀 더 우아하게 만들어보면?
+- 두개 이상의 인자가 들어오면 즉시 평가하고
+- 하나의 인자가 들어오면 또다시 iterable 을 받을 수 있는 함수를 리턴하도록
+const curry = f => (a, ...args) =>
+  args.length ?
+    f(a, ...args) :
+    (...args) => f(a, ...args);
+
+</pre>
+<script>
+const curry = f => a => b => f(a, b);
+const add = curry((a, b) => a + b);
+log(add(10)(5));
+</script>
+
+<pre>
+앞에서 만들었던 함수를 보기 좋게 만들어보자.
+const add = (acc, a) => acc += a;
+log(reduce(add, 0, 
+  L.take(3, 
+    L.map(a => a * a, 
+      L.filter(a => a % 2, [1,2,3,4,5,6]))))
+)
+
+- 그 전에 reduce 개선, 초기값을 입력하지 않아도 되도록.
+const reduce = function(f, acc, iter) {
+  if (arguments.length === 2) {
+    iterable = acc[Symbol.iterator]();
+    acc = iterable.next().value;
+  }
+  for (const a of iter) {
+    acc = f(acc, a)
+  }
+  return acc;
+}
+</pre>
+
+<script>
+// go 로 적용을 해보면 아래와 같은데
+// 좀 보기 좋나? 별로다. L 에 curry 를 적용해보자.
+go([1,2,3,4,5,6],
+  list => L.filter(a => a % 2, list),
+  list => L.map(a => a * a, list),
+  list => L.take(3, list),
+  list => reduce(add, 0, list),
+  log);
+
+
+// 아래와 같이 가능하다. 그런데 이렇게 할 수 있다는 소리는?
+// go([1,2,3,4,5,6],
+//   list => L.filter(a => a % 2)(list),
+//   list => L.map(a => a * a)(list),
+//   list => L.take(3)(list),
+//   list => reduce(add)(list),
+//   log)
+
+
+// 이렇게 할 수 있다는 소리다.
+// go([1,2,3,4,5,6],
+//   L.filter(a => a % 2),
+//   L.map(a => a * a),
+//   L.take(3),
+//   reduce(add),
+//   log)
+</script>
+
+<h2>flat 으로 2차원 배열 다루기</h2>
+<pre>
+  [[1, 2, 3], [4, 5], [6, 7]] 를 전부 더해보자
+</pre>
+<script>
+const isIterable = iter =>
+  Boolean(iter && iter[Symbol.iterator]);
+
+L.flat = function* (iterable) {
+  for (const a of iterable) {
+    if (isIterable(a)) {
+      for (const b of a) {
+        yield b;
+      }
+    } else {
+      yield a;
+    }
+  }
+};
+
+log([...L.flat([[1, 2, 3], [4, 5], [6, 7]])]);
+
+go(
+  [[1, 2, 3], [4, 5], [6, 7]],
+  L.flat,
+  L.map(a => a * a),
+  L.filter(a => a % 2),
+  reduce(add),
+  log);
+</script>
+
+<h2>Real World Example</h2>
+<pre>
+user 데이터에서 10대의 나이를 3개를 뽑아서 합을 구해보자.
+
+[
+  { name: 'a', age: 21, family: [
+    { name: 'a1', age: 53 }, { name: 'a2', age: 47 },
+    { name: 'a3', age: 16 }, { name: 'a4', age: 14 }
+  ] },
+  { name: 'b', age: 24, family: [
+    { name: 'b1', age: 58 }, { name: 'b2', age: 51 },
+    { name: 'b3', age: 10 }, { name: 'b4', age: 22 }
+  ] },
+  { name: 'c', age: 31, family: [
+    { name: 'c1', age: 64 }, { name: 'c2', age: 62 }
+  ] },
+  { name: 'd', age: 20, family: [
+    { name: 'd1', age: 42 }, { name: 'd2', age: 42 },
+    { name: 'd3', age: 11 }, { name: 'd4', age: 7 }
+  ] }
+]
+
+지연적으로 동작하기때문에 최적의 성능을 발휘한다.
+</pre>
+<script>
+const users = [
+  { name: 'a', age: 21, family: [
+    { name: 'a1', age: 53 }, { name: 'a2', age: 47 },
+    { name: 'a3', age: 16 }, { name: 'a4', age: 14 }
+  ] },
+  { name: 'b', age: 24, family: [
+    { name: 'b1', age: 58 }, { name: 'b2', age: 51 },
+    { name: 'b3', age: 10 }, { name: 'b4', age: 22 }
+  ] },
+  { name: 'c', age: 31, family: [
+    { name: 'c1', age: 64 }, { name: 'c2', age: 62 }
+  ] },
+  { name: 'd', age: 20, family: [
+    { name: 'd1', age: 42 }, { name: 'd2', age: 42 },
+    { name: 'd3', age: 11 }, { name: 'd4', age: 7 }
+  ] }
+];
+
+// 재밋는 것은 지연적으로 동작하기 때문에 최적의 성능을 발휘한다.
+go(
+  users,
+  L.map(u => {  // 여기서 딱 a family  하나만 나옴
+    console.log(u.family);
+    return u.family;
+  }),
+  L.flat,
+  L.map(u => u.age),
+  L.filter(age => age < 20),
+  L.take(3),
+  reduce(add),
+  log);
+</script>
+
